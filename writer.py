@@ -70,10 +70,12 @@ class HDF5ImageWriter(object):
         self.db.close()
         
 # dataset source
-directory = './dataset/Flickr/'
+directory = './v2/Flickr/final'
 
 # get image paths
 X_paths = shuffle(list(paths.list_images(directory)))
+
+print(len(X_paths))
 
 # get image classes
 classes = [path.split(os.path.sep)[-1].split('_')[0] for path in X_paths]
@@ -82,26 +84,53 @@ classes = [path.split(os.path.sep)[-1].split('_')[0] for path in X_paths]
 enc = LabelEncoder()
 y = enc.fit_transform(classes)
 
+print(enc.classes_)
+
 # randomized split
-X_train, X_test, y_train, y_test = train_test_split(X_paths, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X_paths, y, test_size=0.25, random_state=42)
+
+import efficientnet.keras as efn
+
+S = 240
+D = 3
+
+shape = (S, S, D)
 
 # set writer
 h5_writer = HDF5ImageWriter(
-    src="train.h5", dims=(len(X_train), 150, 150, 3)
+    src="train.h5", dims=(len(X_train), *shape)
 )
-
-import efficientnet.keras as efn
 
 # build hdf5
 with h5_writer as writer:
     for index, (path, label) in enumerate(zip(X_train, y_train)):
         raw_image = load_img(path)
         image = img_to_array(raw_image)
-        # efficient net resizing b0: 150, b1: 220, b2: 240, b3: 300
-        image = efn.center_crop_and_resize(image, 150)
+        # efficient net resizing b0: 224, b1: 240, b2: 260, b3: 300
+        image = efn.center_crop_and_resize(image, S)
         # mean scaling (disable -1/1)
         image = efn.preprocess_input(image)
         writer.add([image], [label])
         print(index, 'over', len(X_train), 'Added', path, label)
+    print(enc.classes_)
+    writer.add_classes(enc.classes_)
+    
+    
+# set writer
+h5_writer_val = HDF5ImageWriter(
+    src="val.h5", dims=(len(X_test), *shape)
+)
+
+# build hdf5
+with h5_writer_val as writer:
+    for index, (path, label) in enumerate(zip(X_test, y_test)):
+        raw_image = load_img(path)
+        image = img_to_array(raw_image)
+        # efficient net resizing b0: 224, b1: 240, b2: 260, b3: 300
+        image = efn.center_crop_and_resize(image, S)
+        # mean scaling (disable -1/1)
+        image = efn.preprocess_input(image)
+        writer.add([image], [label])
+        print(index, 'over', len(X_test), 'Added', path, label)
     print(enc.classes_)
     writer.add_classes(enc.classes_)
