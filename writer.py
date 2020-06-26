@@ -68,69 +68,113 @@ class HDF5ImageWriter(object):
             self.__flush()
 
         self.db.close()
+
+#directory = 'v2/Flickr/final'
         
 # dataset source
-directory = './v2/Flickr/final'
+directory = './v3/b-t4sa_train.txt'
+
+with open(directory, 'r') as fh:
+    lines = shuffle(fh.readlines())
+    items = [x.strip().split(' ') for x in lines]
+    items = [(path, label) for path, label in items if label in {'0', '2'}]
+
+    
+    
+print(items[:10])
+
+mapper = {
+    '0': 0, # NEG
+    '2': 0  # POS
+}
+
+X = []
+y = []
+   
+for path, label in items:        
+    if mapper[label] < 50000:
+        mapper[label] += 1
+        X.append(path)
+        y.append(label)
 
 # get image paths
-X_paths = shuffle(list(paths.list_images(directory)))
+#X = shuffle(list(paths.list_images(directory)))
 
-print(len(X_paths))
+#print(len(X))
 
 # get image classes
-classes = [path.split(os.path.sep)[-1].split('_')[0] for path in X_paths]
+#y = [path.split(os.path.sep)[-1].split('_')[0] for path in X]
 
 # encode classes  str => int
 enc = LabelEncoder()
-y = enc.fit_transform(classes)
+encoded_y = enc.fit_transform(y)
 
 print(enc.classes_)
 
-# randomized split
-X_train, X_test, y_train, y_test = train_test_split(X_paths, y, test_size=0.25, random_state=42)
+# randomized splitt
+X_train, X_test, y_train, y_test = train_test_split(X, encoded_y, test_size=0.2, random_state=42)
+
+print(len(X_train), len(X_test))
+print(X_train[:10])
+
 
 import efficientnet.keras as efn
 
-S = 240
+S = 150
 D = 3
+
+mean=[0.485, 0.456, 0.406]
+std=[0.229, 0.224, 0.225]
 
 shape = (S, S, D)
 
 # set writer
 h5_writer = HDF5ImageWriter(
-    src="train.h5", dims=(len(X_train), *shape)
+    src="v3/train.h5", dims=(len(X_train), *shape)
 )
 
 # build hdf5
 with h5_writer as writer:
     for index, (path, label) in enumerate(zip(X_train, y_train)):
-        raw_image = load_img(path)
-        image = img_to_array(raw_image)
-        # efficient net resizing b0: 224, b1: 240, b2: 260, b3: 300
-        image = efn.center_crop_and_resize(image, S)
-        # mean scaling (disable -1/1)
-        image = efn.preprocess_input(image)
-        writer.add([image], [label])
-        print(index, 'over', len(X_train), 'Added', path, label)
+        try:
+            raw_image = load_img(os.path.join('v3/', path), target_size=(S, S))
+        except Exception:
+            print('skip', path)
+        else:
+            image = img_to_array(raw_image)
+            # efficient net resizing b0: 224, b1: 240, b2: 260, b3: 300
+            #image = efn.center_crop_and_resize(image, S)
+            # mean scaling (disable -1/1)
+            #image = efn.preprocess_input(image)
+            image /= 255
+            image = (image - mean) / std
+            writer.add([image], [label])
+            print(index, 'over', len(X_train), 'Added', path, label)
     print(enc.classes_)
     writer.add_classes(enc.classes_)
     
     
 # set writer
 h5_writer_val = HDF5ImageWriter(
-    src="val.h5", dims=(len(X_test), *shape)
+    src="v3/val.h5", dims=(len(X_test), *shape)
 )
 
 # build hdf5
 with h5_writer_val as writer:
     for index, (path, label) in enumerate(zip(X_test, y_test)):
-        raw_image = load_img(path)
-        image = img_to_array(raw_image)
-        # efficient net resizing b0: 224, b1: 240, b2: 260, b3: 300
-        image = efn.center_crop_and_resize(image, S)
-        # mean scaling (disable -1/1)
-        image = efn.preprocess_input(image)
-        writer.add([image], [label])
-        print(index, 'over', len(X_test), 'Added', path, label)
+        try:
+            raw_image = load_img(os.path.join('v3/', path), target_size=(S, S))
+        except Exception:
+            print('skip', path)
+        else:
+            image = img_to_array(raw_image)
+            # efficient net resizing b0: 224, b1: 240, b2: 260, b3: 300
+            #image = efn.center_crop_and_resize(image, S)
+            # mean scaling (disable -1/1)
+            #image = efn.preprocess_input(image)
+            image /= 255
+            image = (image - mean) / std
+            writer.add([image], [label])
+            print(index, 'over', len(X_test), 'Added', path, label)
     print(enc.classes_)
     writer.add_classes(enc.classes_)
